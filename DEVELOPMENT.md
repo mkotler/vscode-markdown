@@ -7,7 +7,7 @@
    -  npm config set registry https://registry.npmjs.org/
    -  then run npm install again
 2. npm run build
-3. npx nsce package
+3. npx vsce package
 4. Install the extension in vs code:
    - Press ctrl+shift+p and select Extensions: Install from VSIX
    - Select the .vsix file
