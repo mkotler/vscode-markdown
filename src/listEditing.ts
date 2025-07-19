@@ -472,7 +472,9 @@ function checkTaskList(): Thenable<unknown> | void {
     const editor = window.activeTextEditor!;
     const uncheckedRegex = /^(\s*([-+*]|[0-9]+[.)]) +\[) \]/
     const checkedRegex = /^(\s*([-+*]|[0-9]+[.)]) +\[)x\]/
+    const noCheckboxRegex = /^(\s*([-+*]|[0-9]+[.)]) +)(?!\[[ x]\])/  // List item without a checkbox
     let toBeToggled: Position[] = [] // all spots that have an "[x]" resp. "[ ]" which should be toggled
+    let toBeInserted: [Position, string][] = [] // spots where we need to insert "[ ] "
     let newState: boolean | undefined = undefined // true = "x", false = " ", undefined = no matching lines
 
     // go through all touched lines of all selections.
@@ -498,19 +500,51 @@ function checkTaskList(): Thenable<unknown> | void {
             ) {
                 toBeToggled.push(lineStart.with({ character: matches[1].length }));
                 newState = false;
+            } else if (
+                (matches = noCheckboxRegex.exec(line.text))
+            ) {
+                // For list items without checkboxes, insert "[ ] " after the list marker
+                toBeInserted.push([lineStart.with({ character: matches[1].length }), "[ ] "]);
             }
         }
     }
 
-    if (newState !== undefined) {
-        const newChar = newState ? 'x' : ' ';
-        return editor.edit(editBuilder => {
-            for (const pos of toBeToggled) {
-                let range = new Range(pos, pos.with({ character: pos.character + 1 }));
-                editBuilder.replace(range, newChar);
+    // First add checkboxes where needed
+    if (toBeInserted.length > 0) {
+        return editor.edit(
+            (editBuilder: any) => {
+                for (const [pos, text] of toBeInserted) {
+                    editBuilder.insert(pos, text);
+                }
             }
+        ).then((success) => {
+            // After inserting checkboxes, toggle them if needed
+            if (newState !== undefined) {
+                const newChar = newState ? 'x' : ' ';
+                return editor.edit(
+                    (editBuilder: any) => {
+                        for (const pos of toBeToggled) {
+                            let range = new Range(pos, pos.with({ character: pos.character + 1 }));
+                            editBuilder.replace(range, newChar);
+                        }
+                    }
+                );
+            }
+            // Return the success value from the previous edit
+            return success;
         });
-    }
+    } else if (newState !== undefined) {
+        // If no insertions were needed, just toggle existing checkboxes
+        const newChar = newState ? 'x' : ' ';
+        return editor.edit(
+            (editBuilder: any) => {
+                for (const pos of toBeToggled) {
+                    let range = new Range(pos, pos.with({ character: pos.character + 1 }));
+                    editBuilder.replace(range, newChar);
+                }
+            }
+        );
+    } 
 }
 
 function onMoveLineUp() {
